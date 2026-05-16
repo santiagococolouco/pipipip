@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <!-- ═══════════════════════════════════════════
+       PWA META TAGS
+  ════════════════════════════════════════════ -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pass">
+  <meta name="theme-color" content="#150A34">
+
+  <title>Ticket</title>
+
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: #FFFFFF;
+      font-family: -apple-system, 'Roboto', system-ui, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    /* Conteneur racine plein écran */
+    .app {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      background: #F2F2F7;
+    }
+
+    /* ─────────────────────────────────────────────
+       HEADER
+    ───────────────────────────────────────────── */
+    .header {
+      flex-shrink: 0;
+      position: relative;
+      z-index: 10;
+      background: #150A34;
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+
+    .header__inner {
+      height: 62px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      position: relative;
+    }
+
+    .header__back {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #19132D;
+      border: 1.5px solid #362A5C;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
+    }
+
+    .header__title {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #FFFFFF;
+      font-size: 17px;
+      font-weight: 500;
+      letter-spacing: -0.2px;
+      white-space: nowrap;
+    }
+
+    /* ─────────────────────────────────────────────
+       ZONE SCREENSHOT SCROLLABLE
+       flex: 1 → prend tout l'espace entre header et tabbar
+    ───────────────────────────────────────────── */
+    .content-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      /* Le fond gris disparaît derrière l'image */
+      background: #F2F2F7;
+    }
+
+    .content-drag {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      will-change: transform;
+      touch-action: pan-y;
+    }
+
+    /* ⬇️ MODIFIER ICI : remplacez "ticket.png" par votre fichier */
+    .ticket-screenshot {
+      width: 100%;
+      display: block;
+      pointer-events: none;
+      -webkit-user-drag: none;
+    }
+
+    /* ─────────────────────────────────────────────
+       HORLOGE LIVE
+       Position réglée via CLOCK_TOP / CLOCK_RIGHT dans le <script>
+    ───────────────────────────────────────────── */
+    .clock-overlay {
+      position: absolute;
+      color: #162044;
+      font-size: 16px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.3px;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* ─────────────────────────────────────────────
+       TAB BAR — collée en bas, pleine largeur, blanche
+       flex-shrink: 0 → jamais écrasée par le contenu
+    ───────────────────────────────────────────── */
+    .tabbar {
+      flex-shrink: 0;
+      z-index: 20;
+      background: #FFFFFF;
+      border-top: 1px solid rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      /* hauteur fixe + safe area home indicator iPhone */
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      height: calc(52px + env(safe-area-inset-bottom, 0px));
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+
+    .tab-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      height: 52px;
+      border-radius: 33px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .tab-item.active {
+      background: #E4E4E4;
+      flex: 1.35;
+    }
+
+    .tab-item__label {
+      font-size: 12px;
+      font-weight: 500;
+      color: #8E8E93;
+      line-height: 1;
+    }
+
+    .tab-item.active .tab-item__label {
+      color: #1C1C1E;
+    }
+
+    .tab-icon {
+      width: 24px;
+      height: 24px;
+      color: #AEAEB2;
+    }
+
+    .tab-item.active .tab-icon {
+      color: #1C1C1E;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══════════════════════════════════════════
+       HEADER
+  ════════════════════════════════════════════ -->
+  <header class="header">
+    <div class="header__inner">
+      <button class="header__back" aria-label="Retour">
+        <svg width="9" height="16" viewBox="0 0 9 16" fill="none">
+          <path d="M8 1L1 8L8 15"
+                stroke="white" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <span class="header__title">Ticket</span>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════
+       ZONE SCREENSHOT SCROLLABLE (doigt vers le haut = voir la suite)
+  ════════════════════════════════════════════ -->
+  <main class="content-wrapper" id="contentWrapper">
+    <div class="content-drag" id="contentDrag">
+
+      <!-- ⬇️ MODIFIER ICI : mettez le nom de votre image ici -->
+      <img
+        class="ticket-screenshot"
+        id="ticketImg"
+        src="ticket.jpeg"
+        alt="Interrail Pass Ticket"
+        draggable="false"
+      />
+
+      <!-- Horloge live — positionnée par CLOCK_TOP / CLOCK_RIGHT ci-dessous -->
+      <div class="clock-overlay" id="clockOverlay"></div>
+
+    </div>
+  </main>
+
+  <!-- ═══════════════════════════════════════════
+       TAB BAR — collée en bas, blanche, pleine largeur
+  ════════════════════════════════════════════ -->
+  <nav class="tabbar" aria-label="Navigation principale">
+
+    <!-- Planner -->
+    <div class="tab-item" role="button" aria-label="Planner">
+      <svg class="tab-icon" viewBox="0 0 24 24" fill="none">
+        <g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M11 8v5h5"/>
+        </g>
+      </svg>
+      <span class="tab-item__label">Planner</span>
+    </div>
+
+    <!-- My Trip -->
+    <div class="tab-item" role="button" aria-label="My Trip">
+      <svg class="tab-icon" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M7.462 20q-.671 0-1.144-.472t-.472-1.144V8q0-.671.472-1.143q.473-.473 1.144-.473h2.154V4.616q0-.67.472-1.143T11.23 3h1.538q.671 0 1.143.472t.472 1.144v1.769h2.154q.671 0 1.144.472T18.154 8v10.385q0 .67-.472 1.143q-.472.472-1.143.472v.23q0 .31-.23.54t-.54.23t-.54-.23t-.229-.54V20H9v.23q0 .31-.23.54t-.54.23t-.539-.23t-.23-.54zm0-1h9.077q.269 0 .442-.173t.173-.442V8q0-.27-.173-.442q-.173-.173-.443-.173H7.462q-.27 0-.443.173T6.846 8v10.385q0 .269.173.442t.443.173m2.154-1.77h1V9.155h-1zm3.769 0h1V9.155h-1zm-2.77-10.846h2.77V4.615q0-.269-.173-.442T12.769 4h-1.538q-.27 0-.442.173q-.173.173-.173.442z"/>
+      </svg>
+      <span class="tab-item__label">My Trip</span>
+    </div>
+
+    <!-- My Pass — onglet actif -->
+    <div class="tab-item active" role="button" aria-label="My Pass" aria-current="page">
+      <svg class="tab-icon" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm6 3a5 5 0 0 1 5 5a5 5 0 0 1-5 5a5 5 0 0 1-5-5a5 5 0 0 1 5-5m0 1c-.41.62-.75 1.29-.96 2h1.92A7.2 7.2 0 0 0 12 6m-1.3.22C9.78 6.53 9 7.17 8.54 8H10c.18-.62.4-1.22.7-1.78m2.59 0c.3.56.53 1.16.71 1.78h1.46c-.46-.83-1.25-1.46-2.17-1.78M8.13 9c-.08.32-.13.65-.13 1s.05.68.13 1h1.69c-.04-.33-.07-.66-.07-1s.03-.67.07-1zm2.7 0c-.05.32-.08.66-.08 1s.03.67.08 1h2.34c.04-.33.08-.66.08-1s-.04-.68-.08-1zm3.35 0c.04.33.07.66.07 1s-.03.67-.07 1h1.69c.08-.32.13-.65.13-1s-.05-.68-.13-1zm-5.64 3c.46.83 1.24 1.46 2.16 1.78c-.3-.56-.52-1.15-.7-1.78zm2.5 0c.21.72.55 1.38.96 2c.42-.62.75-1.28.96-2zM14 12c-.18.63-.41 1.22-.71 1.78c.92-.32 1.71-.95 2.17-1.78zm-7 5h10v2H7z"/>
+      </svg>
+      <span class="tab-item__label">My Pass</span>
+    </div>
+
+    <!-- More -->
+    <div class="tab-item" role="button" aria-label="More">
+      <svg class="tab-icon" viewBox="0 0 24 24">
+        <path fill="currentColor" d="M4 18q-.425 0-.712-.288T3 17t.288-.712T4 16h16q.425 0 .713.288T21 17t-.288.713T20 18zm0-5q-.425 0-.712-.288T3 12t.288-.712T4 11h16q.425 0 .713.288T21 12t-.288.713T20 13zm0-5q-.425 0-.712-.288T3 7t.288-.712T4 6h16q.425 0 .713.288T21 7t-.288.713T20 8z"/>
+      </svg>
+      <span class="tab-item__label">More</span>
+    </div>
+
+  </nav>
+
+</div>
+
+<script>
+  // ============================================================
+  // ⬇️ MODIFIER ICI — Position de l'horloge sur le screenshot
+  //   CLOCK_TOP   = pixels depuis le haut de l'image    ↕
+  //   CLOCK_RIGHT = pixels depuis le bord droit         ↔
+  // ============================================================
+  const CLOCK_TOP   = 18;
+  const CLOCK_RIGHT = 32;   // augmenté : recule légèrement du bord droit
+
+  // ── Horloge live ───────────────────────────────────────────
+  const clockEl = document.getElementById('clockOverlay');
+  clockEl.style.top   = CLOCK_TOP + 'px';
+  clockEl.style.right = CLOCK_RIGHT + 'px';
+
+  function tick() {
+    const d  = new Date();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    clockEl.textContent = `${hh}:${mm}:${ss}`;
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  // ── Scroll vertical libre (doigt vers le haut = voir la suite) ──
+  //
+  //   • Le contenu ne peut PAS descendre sous sa position initiale
+  //     (pas de gap au-dessus du ticket)
+  //   • Le contenu remonte jusqu'à ce que toute l'image soit visible
+  //   • Rubber-banding élastique aux deux extrémités
+  // ────────────────────────────────────────────────────────────────
+  const dragEl  = document.getElementById('contentDrag');
+  const wrapper = document.getElementById('contentWrapper');
+  const img     = document.getElementById('ticketImg');
+
+  let overflow = 0;
+  let baseY    = 0;
+  let liveY    = 0;
+  let startY   = 0;
+  let dragging = false;
+
+  // Suivi de vélocité pour le momentum
+  let velocity = 0;
+  let lastTouchY = 0;
+  let lastTouchT = 0;
+  let rafId = null;
+
+  function calcOverflow() {
+    overflow = Math.max(0, dragEl.scrollHeight - wrapper.clientHeight);
+  }
+  img.addEventListener('load', calcOverflow);
+  if (img.complete) calcOverflow();
+  window.addEventListener('resize', calcOverflow);
+  setTimeout(calcOverflow, 300);
+
+  function applyY(y) {
+    dragEl.style.transition = 'none';
+    dragEl.style.transform  = `translateY(${y}px)`;
+  }
+
+  dragEl.addEventListener('touchstart', e => {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    dragging   = true;
+    startY     = e.touches[0].clientY;
+    lastTouchY = startY;
+    lastTouchT = Date.now();
+    velocity   = 0;
+    baseY      = liveY; // reprend depuis la position momentum actuelle
+  }, { passive: true });
+
+  dragEl.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const now    = Date.now();
+    const touchY = e.touches[0].clientY;
+    const dt     = now - lastTouchT;
+
+    // Calcul vélocité instantanée (px/ms)
+    if (dt > 0) velocity = (touchY - lastTouchY) / dt;
+    lastTouchY = touchY;
+    lastTouchT = now;
+
+    let next = baseY + (touchY - startY);
+    // Rubber-banding léger aux bornes
+    if (next > 0)         next = next * 0.4;
+    if (next < -overflow) next = -overflow + (next + overflow) * 0.4;
+
+    liveY = next;
+    applyY(liveY);
+  }, { passive: true });
+
+  function runMomentum() {
+    // Décélération naturelle (plus haute = freine moins vite)
+    velocity *= 0.94;
+    liveY    += velocity * 16; // ~16ms/frame
+
+    // Rebond aux bornes
+    if (liveY > 0) {
+      liveY    *= 0.75;
+      velocity *= 0.6;
+      if (liveY < 0.5) { liveY = 0; baseY = 0; applyY(0); return; }
+    } else if (liveY < -overflow) {
+      liveY     = -overflow + (liveY + overflow) * 0.75;
+      velocity *= 0.6;
+      if (liveY < -overflow + 0.5) { liveY = -overflow; baseY = -overflow; applyY(-overflow); return; }
+    }
+
+    applyY(liveY);
+
+    if (Math.abs(velocity) > 0.05) {
+      rafId = requestAnimationFrame(runMomentum);
+    } else {
+      baseY = Math.max(-overflow, Math.min(0, liveY));
+      liveY = baseY;
+      applyY(baseY);
+    }
+  }
+
+  function onEnd() {
+    if (!dragging) return;
+    dragging = false;
+    baseY    = liveY;
+
+    // Lance le momentum si le doigt avait de la vitesse
+    if (Math.abs(velocity) > 0.05) {
+      velocity *= 16; // convertit px/ms → px/frame
+      rafId = requestAnimationFrame(runMomentum);
+    } else {
+      // Snap aux bornes si hors limites
+      if (liveY > 0)          baseY = 0;
+      else if (liveY < -overflow) baseY = -overflow;
+      liveY = baseY;
+      applyY(baseY);
+    }
+  }
+
+  dragEl.addEventListener('touchend',    onEnd);
+  dragEl.addEventListener('touchcancel', onEnd);
+</script>
+
+</body>
+</html>
